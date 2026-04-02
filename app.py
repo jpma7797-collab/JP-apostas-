@@ -95,10 +95,43 @@ def api_call(endpoint, params):
         return res.json().get('response', [])
     except: return []
 
+# --- CAÇADOR DE ODDS REAIS ---
+def buscar_odds_reais(f_id):
+    """Busca as odds oficiais disponíveis na API-Sports."""
+    odds_data = api_call("odds", {"fixture": f_id})
+    mercados_reais = {}
+    
+    if odds_data and odds_data[0].get("bookmakers"):
+        # Pega a primeira casa de apostas disponível (Bet365, Betfair, etc)
+        bets = odds_data[0]["bookmakers"][0].get("bets", [])
+        for b in bets:
+            nome = b["name"]
+            valores = b["values"]
+            
+            if nome == "Match Winner":
+                for v in valores:
+                    if v["value"] == "Home": mercados_reais["vitoria_casa"] = float(v["odd"])
+                    if v["value"] == "Away": mercados_reais["vitoria_fora"] = float(v["odd"])
+            elif nome == "Goals Over/Under":
+                for v in valores:
+                    if v["value"] == "Over 1.5": mercados_reais["over_15"] = float(v["odd"])
+                    if v["value"] == "Over 2.5": mercados_reais["over_25"] = float(v["odd"])
+                    if v["value"] == "Under 2.5": mercados_reais["under_25"] = float(v["odd"])
+            elif nome == "Both Teams Score":
+                for v in valores:
+                    if v["value"] == "Yes": mercados_reais["ambas_sim"] = float(v["odd"])
+            elif nome == "Double Chance":
+                for v in valores:
+                    if v["value"] == "Home/Draw": mercados_reais["dc_casa"] = float(v["odd"])
+                    if v["value"] == "Draw/Away": mercados_reais["dc_fora"] = float(v["odd"])
+    return mercados_reais
+
 # --- CÉREBRO JP: ANÁLISE DINÂMICA DE MERCADOS ---
 def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     data = api_call("predictions", {"fixture": f_id})
     lineups = api_call("fixtures/lineups", {"fixture": f_id})
+    odds_reais = buscar_odds_reais(f_id) # Puxando as odds do mercado
+    
     if not data: return None
     
     p = data[0]
@@ -107,7 +140,6 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     
     win_c = float(perc['home'].replace('%',''))
     win_f = float(perc['away'].replace('%',''))
-    empate = float(perc['draw'].replace('%',''))
     
     att_c = float(comp['att']['home'].replace('%',''))
     att_f = float(comp['att']['away'].replace('%',''))
@@ -118,7 +150,6 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     poisson_f = float(comp['poisson_distribution']['away'].replace('%',''))
     poisson_total = poisson_c + poisson_f
     
-    # Form e H2H (Histórico)
     form_c = float(comp['form']['home'].replace('%',''))
     form_f = float(comp['form']['away'].replace('%',''))
     h2h_c = float(comp['h2h']['home'].replace('%',''))
@@ -126,37 +157,44 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
 
     pool = []
     
-    # --- 1. MERCADOS DE RESULTADO (Match Odds) ---
+    # --- 1. MERCADOS DE RESULTADO ---
     if win_c >= 55 and form_c > form_f:
-        pool.append([f"Vitória: {casa_nome}", f"Mandante com momento superior ({win_c}%).", 1.65, "resultado"])
+        odd = odds_reais.get("vitoria_casa", 1.65)
+        pool.append([f"Vitória: {casa_nome}", f"Mandante com momento superior ({win_c}%).", odd, "resultado"])
         if win_c >= 65 and att_c > 60:
-            pool.append([f"Vence o 1º Tempo: {casa_nome}", f"Ataque forte costuma resolver cedo.", 2.20, "resultado_ht"])
+            pool.append([f"Vence o 1º Tempo: {casa_nome}", f"Ataque forte costuma resolver cedo.", odd + 0.60, "resultado_ht"])
     elif win_f >= 55 and form_f > form_c:
-        pool.append([f"Vitória: {fora_nome}", f"Visitante em grande fase ({win_f}%).", 1.75, "resultado"])
+        odd = odds_reais.get("vitoria_fora", 1.75)
+        pool.append([f"Vitória: {fora_nome}", f"Visitante em grande fase ({win_f}%).", odd, "resultado"])
         if win_f >= 65 and att_f > 60:
-            pool.append([f"Vence o 1º Tempo: {fora_nome}", f"Visitante letal nos minutos iniciais.", 2.30, "resultado_ht"])
+            pool.append([f"Vence o 1º Tempo: {fora_nome}", f"Visitante letal nos minutos iniciais.", odd + 0.60, "resultado_ht"])
     
     if 40 <= win_c < 55:
-        pool.append([f"Empate Anula: {casa_nome}", f"Jogo equilibrado, proteção para o mandante.", 1.35, "resultado_seguro"])
+        odd = odds_reais.get("dc_casa", 1.35)
+        pool.append([f"Dupla Chance: {casa_nome} ou Empate", f"Jogo equilibrado, proteção para o mandante.", odd, "resultado_seguro"])
     elif 40 <= win_f < 55:
-        pool.append([f"Empate Anula: {fora_nome}", f"Proteção essencial para o visitante.", 1.45, "resultado_seguro"])
+        odd = odds_reais.get("dc_fora", 1.45)
+        pool.append([f"Dupla Chance: {fora_nome} ou Empate", f"Proteção essencial para o visitante.", odd, "resultado_seguro"])
 
     # --- 2. MERCADOS DE GOLS ---
     if poisson_total >= 65 and att_c > 45 and att_f > 45:
-        pool.append(["Mais de 2.5 Gols", "Times com alto índice de finalização.", 1.85, "gols_over"])
-        pool.append(["Ambas Marcam: Sim", "Padrão tático de jogo aberto dos dois lados.", 1.75, "ambas"])
+        odd_over = odds_reais.get("over_25", 1.85)
+        odd_ambas = odds_reais.get("ambas_sim", 1.75)
+        pool.append(["Mais de 2.5 Gols", "Times com alto índice de finalização.", odd_over, "gols_over"])
+        pool.append(["Ambas Marcam: Sim", "Padrão tático de jogo aberto dos dois lados.", odd_ambas, "ambas"])
     elif poisson_total >= 50:
-        pool.append(["Mais de 1.5 Gols", "Tendência segura de rede balançando.", 1.30, "gols_over"])
+        odd = odds_reais.get("over_15", 1.30)
+        pool.append(["Mais de 1.5 Gols", "Tendência segura de rede balançando.", odd, "gols_over"])
     
     if def_c > 65 and def_f > 65 and poisson_total < 40:
-        pool.append(["Menos de 2.5 Gols", "Defesas sólidas, jogo muito truncado.", 1.65, "gols_under"])
+        odd = odds_reais.get("under_25", 1.65)
+        pool.append(["Menos de 2.5 Gols", "Defesas sólidas, jogo muito truncado.", odd, "gols_under"])
 
-    # --- 3. CHUTES E FINALIZAÇÕES ---
+    # --- 3. CHUTES E FINALIZAÇÕES (Mercados Alternativos) ---
     if att_c >= 60:
         pool.append([f"Chutes ao Gol ({casa_nome}): Mais de 4.5", "Mandante pressiona muito em casa.", 1.70, "chutes_casa"])
     if att_f >= 55:
         pool.append([f"Chutes ao Gol ({fora_nome}): Mais de 3.5", "Visitante usa muito o contra-ataque.", 1.80, "chutes_fora"])
-    
     if lineups and win_c > 50:
         pool.append([f"Atacante {casa_nome} (+1.5 Chutes a Gol)", "Homem de referência será muito acionado.", 2.10, "jogador_chutes"])
 
@@ -164,16 +202,13 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     pressao_total = att_c + att_f + form_c + form_f
     if pressao_total > 220:
         pool.append(["Mais de 8.5 Escanteios na Partida", "Jogo de muita intensidade pelas pontas.", 1.65, "escanteios"])
-        if att_c > att_f + 15:
-            pool.append([f"Mais Escanteios: {casa_nome}", "Diferença técnica gera abafa do mandante.", 1.55, "escanteios_match"])
     elif pressao_total > 180:
         pool.append(["Mais de 7.5 Escanteios", "Volume de jogo favorável a bloqueios na linha de fundo.", 1.40, "escanteios"])
 
     # --- 5. CARTÕES E FALTAS ---
-    agressividade = (100 - def_c) + (100 - def_f) # Se a defesa é fraca, times tendem a apelar para faltas
-    if agressividade > 110 or (h2h_c > 45 and h2h_f > 45): # Histórico parelho = clássico/jogo duro
+    agressividade = (100 - def_c) + (100 - def_f)
+    if agressividade > 110 or (h2h_c > 45 and h2h_f > 45):
         pool.append(["Mais de 4.5 Cartões no Jogo", "Histórico do confronto e estilo das defesas pedem jogo faltoso.", 1.70, "cartoes"])
-        pool.append(["Mais de 1.5 Cartões 1º Tempo", "Os ânimos costumam exaltar cedo neste tipo de duelo.", 1.85, "cartoes_ht"])
         pool.append(["Mais de 24.5 Faltas", "Muitas paradas táticas e erros de marcação esperados.", 1.80, "faltas"])
     
     # --- 6. IMPEDIMENTOS ---
@@ -191,13 +226,12 @@ def construir_bilhetes(mercados_pool):
     bilhetes_conservadores = []
     bilhetes_ousados = []
     
-    # Tenta montar bilhetes aleatórios e os classifica pela Odd Total
-    for _ in range(20): # Limite de tentativas para achar combinações
+    for _ in range(30):
         if len(bilhetes_conservadores) >= 2 and len(bilhetes_ousados) >= 2:
             break
             
         random.shuffle(mercados_pool)
-        qtd_itens = random.randint(2, 4) # Bilhetes de 2 a 4 seleções
+        qtd_itens = random.randint(2, 4)
         
         bilhete_atual = []
         categorias_usadas = set()
@@ -213,7 +247,6 @@ def construir_bilhetes(mercados_pool):
                 break
                 
         if len(bilhete_atual) >= 2:
-            # Regra solicitada: Odd <= 4.0 (Conservador) | Odd > 4.0 (Ousado)
             if odd_total <= 4.0 and len(bilhetes_conservadores) < 2:
                 bilhetes_conservadores.append({"itens": bilhete_atual, "odd": odd_total})
             elif odd_total > 4.0 and len(bilhetes_ousados) < 2:
@@ -232,7 +265,7 @@ def renderizar_bilhetes(lista_bilhetes, tipo, titulo):
         
         html_card = f'<div class="bet-card"><div class="bet-title">{icone} {titulo} {i+1}</div><div class="odd-box {classe_odd}">Odd: {b["odd"]:.2f}</div>'
         for x in b["itens"]:
-            html_card += f'<div class="bet-item"><div class="bet-market">🎯 {x[0]}</div><div class="bet-reason">{x[1]}</div></div>'
+            html_card += f'<div class="bet-item"><div class="bet-market">🎯 {x[0]} <span style="color:#00e676; font-size:0.9rem;">({x[2]:.2f})</span></div><div class="bet-reason">{x[1]}</div></div>'
         html_card += '</div>'
         col.markdown(html_card, unsafe_allow_html=True)
 
@@ -270,14 +303,13 @@ with tab_ia:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if st.button("🚀 PROCESSAR ANÁLISE DINÂMICA", type="primary", use_container_width=True) and jogo_obj:
-            with st.spinner("Lendo histórico, momento, ataques e defesas para gerar mercados exclusivos..."):
+            with st.spinner("Lendo histórico, cruzando dados defensivos/ofensivos e buscando odds reais nas casas de apostas..."):
                 intel = motor_de_analise_avancada(jogo_obj['fixture']['id'], jogo_obj['teams']['home']['name'], jogo_obj['teams']['away']['name'])
             
             if intel and len(intel['mercados']) >= 2:
                 if tipo_analise == "Entradas Simples":
                     st.markdown("### 🏆 Recomendações Individuais (Baseado na leitura do jogo)")
                     cols = st.columns(min(3, len(intel['mercados'])))
-                    # Pega os 3 mercados com odds mais "seguras" para entradas simples
                     mercados_simples = sorted(intel['mercados'], key=lambda x: x[2])[:3]
                     for i, m in enumerate(mercados_simples):
                         card_simples = f'<div class="bet-card"><div class="bet-title">Entrada {i+1}</div><div class="odd-box">Odd: {m[2]:.2f}</div><div class="bet-item"><div class="bet-market">🎯 {m[0]}</div><div class="bet-reason">{m[1]}</div></div></div>'
@@ -290,14 +322,10 @@ with tab_ia:
                         st.markdown("### 🛡️ BILHETES CONSERVADORES (Odd Total até 4.0)")
                         renderizar_bilhetes(b_cons, "seguro", "Bilhete Seguro")
                         st.markdown("<br>", unsafe_allow_html=True)
-                    else:
-                        st.info("Nenhuma combinação conservadora viável com os dados atuais desta partida.")
 
                     if b_ous:
                         st.markdown("### 🔥 BILHETES OUSADOS (Odd Total acima de 4.0)")
                         renderizar_bilhetes(b_ous, "ousado", "Bilhete Ousado")
-                    else:
-                        st.info("Os dados do jogo indicam um cenário muito fechado. O Cérebro JP optou por não forçar apostas de risco extremo.")
             else:
                 st.warning("Jogo com pouquíssimas estatísticas. Não há margem segura para gerar bilhetes personalizados.")
 
