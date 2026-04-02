@@ -9,7 +9,7 @@ st.set_page_config(page_title="JP Apostas Pro", layout="wide", initial_sidebar_s
 # --- SUA CHAVE DA API ---
 CHAVE_API = "916bce9d916e28de163631b77d022cfc"
 
-# --- CSS PERSONALIZADO (Ajustado para legibilidade) ---
+# --- CSS PERSONALIZADO ---
 st.markdown('''
 <style>
 [data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none; }
@@ -35,7 +35,7 @@ def api_call(endpoint, params):
         return res.json().get('response', [])
     except: return []
 
-# --- CÉREBRO JP: MOTOR DE ANÁLISE COMPLETO ---
+# --- CÉREBRO JP: MOTOR DE ANÁLISE RECALIBRADO ---
 def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     data = api_call("predictions", {"fixture": f_id})
     lineups = api_call("fixtures/lineups", {"fixture": f_id})
@@ -47,74 +47,77 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     
     win_c = float(perc['home'].replace('%',''))
     win_f = float(perc['away'].replace('%',''))
+    empate = float(perc['draw'].replace('%',''))
     att_c = float(comp['att']['home'].replace('%',''))
     att_f = float(comp['att']['away'].replace('%',''))
     def_c = float(comp['def']['home'].replace('%',''))
     def_f = float(comp['def']['away'].replace('%',''))
     poisson_total = float(comp['poisson_distribution']['home'].replace('%','')) + float(comp['poisson_distribution']['away'].replace('%',''))
     
-    # ESTRUTURA: [Mercado, Justificativa, Odd Simulada, Score]
     pool = []
-    # 1. RESULTADOS
-    if win_c > 65: pool.append([f"Vitória: {casa_nome}", f"Dominância clara do mandante ({win_c}%).", 1.55, win_c])
-    elif win_f > 65: pool.append([f"Vitória: {fora_nome}", f"Visitante amplamente favorito ({win_f}%).", 1.65, win_f])
     
-    # 2. GOLS
-    if poisson_total > 70:
-        pool.append(["Mais de 2.5 Gols", f"Índice Poisson altíssimo ({poisson_total:.1f}%).", 1.75, poisson_total])
-        pool.append(["Ambas Marcam: Sim", f"Poder ofensivo forte de ambos lados (Média: {(att_c + att_f)/2:.1f}%).", 1.80, (att_c + att_f)/2])
+    # 1. RESULTADOS (Agora entende jogos equilibrados)
+    if win_c >= 55: pool.append([f"Vitória: {casa_nome}", f"Favoritismo do mandante ({win_c}%).", 1.65, win_c])
+    elif win_f >= 55: pool.append([f"Vitória: {fora_nome}", f"Visitante favorito ({win_f}%).", 1.75, win_f])
+    
+    if 40 <= win_c < 55: pool.append([f"Empate Anula: {casa_nome}", f"Jogo duro, mas mandante com ligeira vantagem ({win_c}%).", 1.40, win_c + 15])
+    elif 40 <= win_f < 55: pool.append([f"Empate Anula: {fora_nome}", f"Visitante perigoso com proteção ({win_f}%).", 1.50, win_f + 15])
+    
+    # 2. GOLS (Métricas mais acessíveis)
+    if poisson_total >= 55: pool.append(["Mais de 1.5 Gols", f"Tendência sólida para pelo menos 2 gols ({poisson_total:.1f}%).", 1.35, poisson_total + 10])
+    if poisson_total >= 65: pool.append(["Mais de 2.5 Gols", f"Índice de gols muito alto ({poisson_total:.1f}%).", 1.80, poisson_total])
+    if (att_c + att_f)/2 >= 55: pool.append(["Ambas Marcam: Sim", f"Produção ofensiva dos dois lados (Média: {(att_c + att_f)/2:.1f}%).", 1.75, (att_c + att_f)/2])
     
     # 3. CHUTES AO GOL
-    if att_c > 75: pool.append([f"Chutes ao Gol ({casa_nome}): Mais de 4.5", f"Mandante com alto volume de finalização ({att_c}%).", 1.85, att_c])
-    if att_f > 75: pool.append([f"Chutes ao Gol ({fora_nome}): Mais de 3.5", f"Visitante perigoso no contra-ataque ({att_f}%).", 1.90, att_f])
+    if att_c >= 55: pool.append([f"Chutes ao Gol ({casa_nome}): Mais de 4.5", f"Mandante com boa presença no ataque ({att_c}%).", 1.70, att_c])
+    if att_f >= 55: pool.append([f"Chutes ao Gol ({fora_nome}): Mais de 3.5", f"Visitante finaliza bem ({att_f}%).", 1.75, att_f])
     
     # 4. CARTÕES
     score_cartoes = (200 - (def_c + def_f)) / 2
-    if score_cartoes > 65:
-        pool.append(["Mais de 4.5 Cartões", f"Defesas vulneráveis (Média Def.: {(def_c+def_f)/2:.1f}%), jogo deve ser faltoso.", 1.80, score_cartoes])
+    if score_cartoes >= 50: pool.append(["Mais de 4.5 Cartões", f"Defesas que costumam parar o jogo (Score: {score_cartoes:.1f}).", 1.65, score_cartoes])
     
     # 5. ESCANTEIOS
-    if att_c > 80: pool.append([f"Escanteios ({casa_nome}): Mais de 5.5", f"Pressão constante do mandante pelas pontas.", 1.70, att_c])
+    if att_c >= 60: pool.append([f"Escanteios ({casa_nome}): Mais de 4.5", f"Time usa bastante as linhas de fundo.", 1.60, att_c])
+    if att_c + att_f >= 110: pool.append(["Mais de 8.5 Escanteios na partida", f"Volume ofensivo alto gera cantos.", 1.75, (att_c+att_f)/2])
     
-    # 6. JOGADOR (PROPS)
-    if win_c > 60 and att_c > 70:
-        pool.append([f"Atacante {casa_nome} (+1.5 Chutes)", f"Principal referência ofensiva em jogo de domínio.", 2.10, (win_c + att_c)/2])
+    # 6. JOGADOR
+    if win_c >= 50 and att_c >= 60: pool.append([f"Atacante {casa_nome} (+1.5 Chutes)", f"Ataque vai depender do camisa 9.", 2.10, (win_c + att_c)/2])
 
-    # Ordena por score de confiança
     pool.sort(key=lambda x: x[3], reverse=True)
     return {"status": "✅ Oficial" if lineups else "⏳ Provável", "mercados": pool}
 
-# --- FUNÇÃO HELPER PARA GERAR BILHETES DIVERSOS ---
+# --- FUNÇÃO HELPER ROBUSTA ---
 def gerar_bilhetes_diversos(mercados_pool, cor_classe, titulo_prefixo):
+    if not mercados_pool:
+        st.warning(f"Aguardando mais dados para o {titulo_prefixo}.")
+        return
+
     cols = st.columns(3)
     mercados_restantes = mercados_pool.copy()
     
     for i, col in enumerate(cols):
-        # Tenta pegar mercados diferentes para cada bilhete
-        qtd = random.randint(3, 4)
+        # Garante que não vai pedir mais itens do que tem na lista
+        max_itens = min(random.randint(3, 4), len(mercados_pool))
+        if max_itens < 2: max_itens = len(mercados_pool)
         
-        if len(mercados_restantes) >= qtd:
-            itens = random.sample(mercados_restantes, qtd)
-            # Remove os itens escolhidos para o próximo bilhete ser diferente
+        if len(mercados_restantes) >= max_itens:
+            itens = random.sample(mercados_restantes, max_itens)
             for item in itens:
                 if item in mercados_restantes:
                     mercados_restantes.remove(item)
         else:
-            # Se acabarem os mercados únicos, completa com os melhores do pool original
-            itens = mercados_restantes + random.sample(mercados_pool, min(qtd - len(mercados_restantes), len(mercados_pool)))
+            # Se faltar item único, pega da lista principal (permite leve repetição para não quebrar)
+            itens = random.sample(mercados_pool, max_itens)
             
         odd_t = 1.0
         for x in itens: odd_t *= x[2]
         
-        # Monta o conteúdo do bilhete com a justificativa de volta!
         conteudo_bilhete = f"**{titulo_prefixo} {i+1}**\n\n**Odd: {odd_t:.2f}**\n\n"
         for x in itens:
-            conteudo_bilhete += f"✅ **{x[0]}**\n_{x[1]}_\n\n" # {x[1]} é a justificativa
+            conteudo_bilhete += f"✅ **{x[0]}**\n_{x[1]}_\n\n"
 
-        if cor_classe == "success":
-            col.success(conteudo_bilhete)
-        else:
-            col.error(conteudo_bilhete)
+        if cor_classe == "success": col.success(conteudo_bilhete)
+        else: col.error(conteudo_bilhete)
 
 # --- INTERFACE ---
 tab_ia, tab_calc = st.tabs(["🧠 IA - Palpites Pro", "🧮 Calculadora"])
@@ -122,7 +125,6 @@ tab_ia, tab_calc = st.tabs(["🧠 IA - Palpites Pro", "🧮 Calculadora"])
 with tab_ia:
     st.title("JP Apostas Pro 🎯")
     
-    # SELEÇÃO DO JOGO
     data_sel = st.date_input("Data:", value=datetime.date.today()).strftime("%Y-%m-%d")
     jogos_dia = api_call("fixtures", {"date": data_sel, "timezone": "America/Sao_Paulo"})
     
@@ -157,7 +159,8 @@ with tab_ia:
             with st.spinner("Analisando dados..."):
                 intel = motor_de_analise_avancada(jogo_obj['fixture']['id'], jogo_obj['teams']['home']['name'], jogo_obj['teams']['away']['name'])
             
-            if intel and len(intel['mercados']) >= 4:
+            # MUDANÇA AQUI: Agora aceita se tiver pelo menos 2 mercados, sem dar erro!
+            if intel and len(intel['mercados']) >= 2:
                 mercados = intel['mercados']
                 
                 if tipo_analise == "Entradas Simples (Top 3)":
@@ -169,13 +172,11 @@ with tab_ia:
                         cols[i].info(f"**{m[0]}**\n\n{m[1]}")
                 
                 else:
-                    # SEPARAÇÃO INTELIGENTE (Score >= 75 é seguro)
-                    m_seguros = [x for x in mercados if x[3] >= 75]
-                    m_ousados = [x for x in mercados if x[3] < 75]
+                    m_seguros = [x for x in mercados if x[3] >= 70]
+                    m_ousados = [x for x in mercados if x[3] < 70]
                     
-                    # Fallback garantindo pelo menos alguns mercados
-                    if len(m_seguros) < 4: m_seguros = mercados[:min(5, len(mercados))]
-                    if len(m_ousados) < 4: m_ousados = mercados[max(0, len(mercados)-5):]
+                    if len(m_seguros) < 3: m_seguros = mercados[:min(5, len(mercados))]
+                    if len(m_ousados) < 3: m_ousados = mercados[max(0, len(mercados)-5):]
 
                     st.subheader("🛡️ BILHETES CONSERVADORES (Diferentes entre si)")
                     gerar_bilhetes_diversos(m_seguros, "success", "Bilhete Seguro")
@@ -185,9 +186,9 @@ with tab_ia:
                     st.subheader("🔥 BILHETES OUSADOS (Diferentes entre si)")
                     gerar_bilhetes_diversos(m_ousados, "error", "Bilhete Ousado")
             else:
-                st.warning("Dados insuficientes para este jogo gerar bilhetes variados.")
+                st.warning("Jogo com pouquíssimas informações na base de dados no momento.")
 
-# --- ABA CALCULADORA (MANTIDA IGUAL) ---
+# --- ABA CALCULADORA ---
 with tab_calc:
     st.header("🧮 Calculadora de Retorno")
     calc_modo = st.radio("Cálculo:", ["Simples", "Múltipla"], horizontal=True, key="calc_global")
