@@ -9,7 +9,7 @@ st.set_page_config(page_title="JP Apostas Pro", layout="wide", initial_sidebar_s
 # --- SUA CHAVE DA API ---
 CHAVE_API = "916bce9d916e28de163631b77d022cfc"
 
-# --- CSS PERSONALIZADO ---
+# --- CSS PERSONALIZADO (Ajustado para legibilidade) ---
 st.markdown('''
 <style>
 [data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none; }
@@ -20,8 +20,8 @@ st.markdown('''
 .main .block-container { padding-top: 1.5rem; max-width: 95%; }
 .stMarkdown, .stText, h1, h2, h3, h4 { color: #ffffff !important; }
 .stInfo { background-color: rgba(255, 255, 255, 0.08) !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; min-height: 250px; }
-.stSuccess { background-color: rgba(0, 200, 83, 0.08) !important; border: 1px solid rgba(0, 200, 83, 0.2) !important; min-height: 280px; }
-.stError { background-color: rgba(255, 75, 75, 0.08) !important; border: 1px solid rgba(255, 75, 75, 0.2) !important; min-height: 280px; }
+.stSuccess { background-color: rgba(0, 200, 83, 0.1) !important; border: 1px solid rgba(0, 200, 83, 0.3) !important; min-height: 280px; padding: 15px; border-radius: 10px; }
+.stError { background-color: rgba(255, 75, 75, 0.1) !important; border: 1px solid rgba(255, 75, 75, 0.3) !important; min-height: 280px; padding: 15px; border-radius: 10px; }
 </style>
 ''', unsafe_allow_html=True)
 
@@ -47,41 +47,74 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     
     win_c = float(perc['home'].replace('%',''))
     win_f = float(perc['away'].replace('%',''))
-    empate = float(perc['draw'].replace('%',''))
     att_c = float(comp['att']['home'].replace('%',''))
     att_f = float(comp['att']['away'].replace('%',''))
     def_c = float(comp['def']['home'].replace('%',''))
     def_f = float(comp['def']['away'].replace('%',''))
     poisson_total = float(comp['poisson_distribution']['home'].replace('%','')) + float(comp['poisson_distribution']['away'].replace('%',''))
     
+    # ESTRUTURA: [Mercado, Justificativa, Odd Simulada, Score]
     pool = []
     # 1. RESULTADOS
-    if win_c > 60: pool.append([f"Vitória: {casa_nome}", "Domínio mandante.", 1.55, win_c])
-    elif win_f > 60: pool.append([f"Vitória: {fora_nome}", "Visitante favorito.", 1.65, win_f])
+    if win_c > 65: pool.append([f"Vitória: {casa_nome}", f"Dominância clara do mandante ({win_c}%).", 1.55, win_c])
+    elif win_f > 65: pool.append([f"Vitória: {fora_nome}", f"Visitante amplamente favorito ({win_f}%).", 1.65, win_f])
     
     # 2. GOLS
-    if poisson_total > 65:
-        pool.append(["Mais de 2.5 Gols", "Tendência over alta.", 1.75, poisson_total])
-        pool.append(["Ambas Marcam: Sim", "Ataques eficientes.", 1.80, (att_c + att_f)/2])
+    if poisson_total > 70:
+        pool.append(["Mais de 2.5 Gols", f"Índice Poisson altíssimo ({poisson_total:.1f}%).", 1.75, poisson_total])
+        pool.append(["Ambas Marcam: Sim", f"Poder ofensivo forte de ambos lados (Média: {(att_c + att_f)/2:.1f}%).", 1.80, (att_c + att_f)/2])
     
-    # 3. CHUTES AO GOL (SISTEMA DE SCORE)
-    if att_c > 70: pool.append([f"Chutes ao Gol ({casa_nome}): Mais de 4.5", "Pressão ofensiva.", 1.85, att_c])
-    if att_f > 70: pool.append([f"Chutes ao Gol ({fora_nome}): Mais de 3.5", "Contra-ataque perigoso.", 1.90, att_f])
+    # 3. CHUTES AO GOL
+    if att_c > 75: pool.append([f"Chutes ao Gol ({casa_nome}): Mais de 4.5", f"Mandante com alto volume de finalização ({att_c}%).", 1.85, att_c])
+    if att_f > 75: pool.append([f"Chutes ao Gol ({fora_nome}): Mais de 3.5", f"Visitante perigoso no contra-ataque ({att_f}%).", 1.90, att_f])
     
-    # 4. CARTÕES E FALTAS
+    # 4. CARTÕES
     score_cartoes = (200 - (def_c + def_f)) / 2
-    if score_cartoes > 60:
-        pool.append(["Mais de 4.5 Cartões", "Defesas expostas.", 1.80, score_cartoes])
+    if score_cartoes > 65:
+        pool.append(["Mais de 4.5 Cartões", f"Defesas vulneráveis (Média Def.: {(def_c+def_f)/2:.1f}%), jogo deve ser faltoso.", 1.80, score_cartoes])
     
     # 5. ESCANTEIOS
-    if att_c > 75: pool.append([f"Escanteios ({casa_nome}): Mais de 5.5", "Uso das pontas.", 1.70, att_c])
+    if att_c > 80: pool.append([f"Escanteios ({casa_nome}): Mais de 5.5", f"Pressão constante do mandante pelas pontas.", 1.70, att_c])
     
     # 6. JOGADOR (PROPS)
-    if win_c > 55 and att_c > 65:
-        pool.append([f"Jogador: Atacante {casa_nome} (+1.5 Chutes)", "Referência no ataque.", 2.10, (win_c + att_c)/2])
+    if win_c > 60 and att_c > 70:
+        pool.append([f"Atacante {casa_nome} (+1.5 Chutes)", f"Principal referência ofensiva em jogo de domínio.", 2.10, (win_c + att_c)/2])
 
+    # Ordena por score de confiança
     pool.sort(key=lambda x: x[3], reverse=True)
     return {"status": "✅ Oficial" if lineups else "⏳ Provável", "mercados": pool}
+
+# --- FUNÇÃO HELPER PARA GERAR BILHETES DIVERSOS ---
+def gerar_bilhetes_diversos(mercados_pool, cor_classe, titulo_prefixo):
+    cols = st.columns(3)
+    mercados_restantes = mercados_pool.copy()
+    
+    for i, col in enumerate(cols):
+        # Tenta pegar mercados diferentes para cada bilhete
+        qtd = random.randint(3, 4)
+        
+        if len(mercados_restantes) >= qtd:
+            itens = random.sample(mercados_restantes, qtd)
+            # Remove os itens escolhidos para o próximo bilhete ser diferente
+            for item in itens:
+                if item in mercados_restantes:
+                    mercados_restantes.remove(item)
+        else:
+            # Se acabarem os mercados únicos, completa com os melhores do pool original
+            itens = mercados_restantes + random.sample(mercados_pool, min(qtd - len(mercados_restantes), len(mercados_pool)))
+            
+        odd_t = 1.0
+        for x in itens: odd_t *= x[2]
+        
+        # Monta o conteúdo do bilhete com a justificativa de volta!
+        conteudo_bilhete = f"**{titulo_prefixo} {i+1}**\n\n**Odd: {odd_t:.2f}**\n\n"
+        for x in itens:
+            conteudo_bilhete += f"✅ **{x[0]}**\n_{x[1]}_\n\n" # {x[1]} é a justificativa
+
+        if cor_classe == "success":
+            col.success(conteudo_bilhete)
+        else:
+            col.error(conteudo_bilhete)
 
 # --- INTERFACE ---
 tab_ia, tab_calc = st.tabs(["🧠 IA - Palpites Pro", "🧮 Calculadora"])
@@ -95,7 +128,7 @@ with tab_ia:
     
     if jogos_dia:
         c1, c2, c3 = st.columns(3)
-        modo = c1.radio("Modo de busca:", ["Destaques", "Países/Ligas"])
+        modo = c1.radio("Busca:", ["Destaques", "Países/Ligas"])
         
         jogo_obj = None
         if modo == "Destaques":
@@ -113,59 +146,48 @@ with tab_ia:
             if j_nome != "Selecione...": jogo_obj = lista_f[j_nome]
 
         st.markdown("---")
-        # --- ESCOLHA ANTES DO BOTÃO ---
         tipo_analise = st.radio(
-            "O que a IA deve gerar para este jogo?", 
-            ["Entradas Simples (Top 3)", "Criar Aposta (6 Bilhetes Múltiplos)"], 
+            "O que a IA deve gerar?", 
+            ["Entradas Simples (Top 3)", "Criar Aposta (6 Bilhetes)"], 
             horizontal=True
         )
         st.markdown("---")
 
-        if st.button("🧠 PROCESSAR ANÁLISE AGORA", type="primary", use_container_width=True) and jogo_obj:
-            with st.spinner("Analisando dados e gerando bilhetes..."):
+        if st.button("🧠 PROCESSAR ANÁLISE", type="primary", use_container_width=True) and jogo_obj:
+            with st.spinner("Analisando dados..."):
                 intel = motor_de_analise_avancada(jogo_obj['fixture']['id'], jogo_obj['teams']['home']['name'], jogo_obj['teams']['away']['name'])
             
-            if intel and len(intel['mercados']) >= 3:
+            if intel and len(intel['mercados']) >= 4:
                 mercados = intel['mercados']
                 
                 if tipo_analise == "Entradas Simples (Top 3)":
                     st.subheader("🏆 Melhores Entradas Individuais")
                     cols = st.columns(3)
-                    for i in range(3):
+                    for i in range(min(3, len(mercados))):
                         m = mercados[i]
                         cols[i].metric(f"Confiança: {round(m[3], 1)}%", f"Odd {m[2]:.2f}")
                         cols[i].info(f"**{m[0]}**\n\n{m[1]}")
                 
-                else: # CRIAR APRESTA - 6 BILHETES
-                    # SEPARAÇÃO POR SCORE (Acima de 75% = Seguro | Abaixo = Ousado)
+                else:
+                    # SEPARAÇÃO INTELIGENTE (Score >= 75 é seguro)
                     m_seguros = [x for x in mercados if x[3] >= 75]
                     m_ousados = [x for x in mercados if x[3] < 75]
                     
-                    # Fallback se não houver mercados suficientes em uma categoria
-                    if len(m_seguros) < 3: m_seguros = mercados[:4]
-                    if len(m_ousados) < 3: m_ousados = mercados[3:] if len(mercados) > 5 else mercados
+                    # Fallback garantindo pelo menos alguns mercados
+                    if len(m_seguros) < 4: m_seguros = mercados[:min(5, len(mercados))]
+                    if len(m_ousados) < 4: m_ousados = mercados[max(0, len(mercados)-5):]
 
-                    st.subheader("🛡️ BILHETES CONSERVADORES (3 a 4 Seleções)")
-                    cs1, cs2, cs3 = st.columns(3)
-                    for i, col in enumerate([cs1, cs2, cs3]):
-                        qtd = random.randint(3, 4)
-                        itens = random.sample(m_seguros, min(qtd, len(m_seguros)))
-                        odd_t = 1.0
-                        for x in itens: odd_t *= x[2]
-                        col.success(f"**Bilhete Seguro {i+1}**\n\n**Odd: {odd_t:.2f}**\n\n" + "\n\n".join([f"✅ {x[0]}" for x in itens]))
+                    st.subheader("🛡️ BILHETES CONSERVADORES (Diferentes entre si)")
+                    gerar_bilhetes_diversos(m_seguros, "success", "Bilhete Seguro")
 
-                    st.subheader("🔥 BILHETES OUSADOS (3 a 4 Seleções)")
-                    co1, co2, co3 = st.columns(3)
-                    for i, col in enumerate([co1, co2, co3]):
-                        qtd = random.randint(3, 4)
-                        itens = random.sample(m_ousados, min(qtd, len(m_ousados)))
-                        odd_t = 1.0
-                        for x in itens: odd_t *= x[2]
-                        col.error(f"**Bilhete Ousado {i+1}**\n\n**Odd: {odd_t:.2f}**\n\n" + "\n\n".join([f"⚡ {x[0]}" for x in itens]))
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    st.subheader("🔥 BILHETES OUSADOS (Diferentes entre si)")
+                    gerar_bilhetes_diversos(m_ousados, "error", "Bilhete Ousado")
             else:
-                st.warning("Dados insuficientes para este jogo. Tente outro.")
+                st.warning("Dados insuficientes para este jogo gerar bilhetes variados.")
 
-# --- ABA CALCULADORA ---
+# --- ABA CALCULADORA (MANTIDA IGUAL) ---
 with tab_calc:
     st.header("🧮 Calculadora de Retorno")
     calc_modo = st.radio("Cálculo:", ["Simples", "Múltipla"], horizontal=True, key="calc_global")
