@@ -12,23 +12,18 @@ CHAVE_API = "916bce9d916e28de163631b77d022cfc"
 # --- CSS PREMIUM (VISUAL DE CASA DE APOSTAS) ---
 st.markdown('''
 <style>
-/* Esconde o menu do Streamlit */
 [data-testid="stSidebar"], [data-testid="collapsedControl"], header, footer { display: none !important; }
 
-/* Fundo geral escuro e sofisticado */
 .stApp {
     background-color: #0b0e14;
     background-image: radial-gradient(circle at top, #1a2130 0%, #0b0e14 100%);
     color: #ffffff;
 }
 
-/* Espaçamento superior */
 .main .block-container { padding-top: 2rem; max-width: 95%; }
 
-/* Customização dos Títulos */
 h1, h2, h3 { color: #ffffff !important; font-weight: 700 !important; }
 
-/* --- CARDS DOS BILHETES --- */
 .bet-card {
     background-color: #151923;
     border: 1px solid #242b3d;
@@ -43,7 +38,6 @@ h1, h2, h3 { color: #ffffff !important; font-weight: 700 !important; }
     border-color: #38435f;
 }
 
-/* Título do Bilhete */
 .bet-title {
     font-size: 1.1rem;
     font-weight: 700;
@@ -55,10 +49,9 @@ h1, h2, h3 { color: #ffffff !important; font-weight: 700 !important; }
     padding-bottom: 10px;
 }
 
-/* Destaque para a ODD */
 .odd-box {
     display: inline-block;
-    background-color: #00e676; /* Verde Bet */
+    background-color: #00e676;
     color: #000000;
     font-size: 1.3rem;
     font-weight: 800;
@@ -68,12 +61,11 @@ h1, h2, h3 { color: #ffffff !important; font-weight: 700 !important; }
     box-shadow: 0 4px 10px rgba(0, 230, 118, 0.2);
 }
 .odd-box.ousado {
-    background-color: #ff5252; /* Vermelho Red Alert */
+    background-color: #ff5252;
     box-shadow: 0 4px 10px rgba(255, 82, 82, 0.2);
     color: #ffffff;
 }
 
-/* Itens da Aposta */
 .bet-item { margin-bottom: 15px; }
 .bet-market {
     font-size: 1.05rem;
@@ -124,13 +116,13 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     
     pool = []
     
-    # 1. RESULTADOS (Categoria: 'resultado')
+    # RESULTADOS (Categoria: 'resultado')
     if win_c >= 55: pool.append([f"Vitória: {casa_nome}", f"Favoritismo do mandante ({win_c}%).", 1.65, win_c, "resultado"])
     elif win_f >= 55: pool.append([f"Vitória: {fora_nome}", f"Visitante favorito ({win_f}%).", 1.75, win_f, "resultado"])
     elif 40 <= win_c < 55: pool.append([f"Empate Anula: {casa_nome}", f"Jogo duro, mas mandante com ligeira vantagem ({win_c}%).", 1.40, win_c + 15, "resultado"])
     elif 40 <= win_f < 55: pool.append([f"Empate Anula: {fora_nome}", f"Visitante perigoso com proteção ({win_f}%).", 1.50, win_f + 15, "resultado"])
     
-    # 2. GOLS (Categoria: 'gols')
+    # GOLS (Categoria: 'gols')
     if poisson_total >= 65: 
         pool.append(["Mais de 2.5 Gols", f"Índice de gols muito alto ({poisson_total:.1f}%).", 1.80, poisson_total, "gols"])
     elif poisson_total >= 55: 
@@ -139,30 +131,30 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     if (att_c + att_f)/2 >= 55: 
         pool.append(["Ambas Marcam: Sim", f"Produção ofensiva dos dois lados.", 1.75, (att_c + att_f)/2, "ambas"])
     
-    # 3. CHUTES AO GOL
+    # CHUTES AO GOL
     if att_c >= 55: pool.append([f"Chutes ao Gol ({casa_nome}): Mais de 4.5", f"Mandante com boa presença no ataque.", 1.70, att_c, "chutes_casa"])
     if att_f >= 55: pool.append([f"Chutes ao Gol ({fora_nome}): Mais de 3.5", f"Visitante finaliza bem.", 1.75, att_f, "chutes_fora"])
     
-    # 4. CARTÕES
+    # CARTÕES
     score_cartoes = (200 - (def_c + def_f)) / 2
     if score_cartoes >= 50: pool.append(["Mais de 4.5 Cartões", f"Defesas que costumam parar o jogo.", 1.65, score_cartoes, "cartoes"])
     
-    # 5. ESCANTEIOS
+    # ESCANTEIOS
     if att_c + att_f >= 110: 
         pool.append(["Mais de 8.5 Escanteios na partida", f"Volume ofensivo alto gera cantos.", 1.75, (att_c+att_f)/2, "escanteios"])
     elif att_c >= 60: 
         pool.append([f"Escanteios ({casa_nome}): Mais de 4.5", f"Time usa bastante as linhas de fundo.", 1.60, att_c, "escanteios"])
     
-    # 6. JOGADOR
+    # JOGADOR
     if win_c >= 50 and att_c >= 60: pool.append([f"Atacante {casa_nome} (+1.5 Chutes)", f"Ataque vai depender do camisa 9.", 2.10, (win_c + att_c)/2, "jogador"])
 
     pool.sort(key=lambda x: x[3], reverse=True)
     return {"status": "✅ Oficial" if lineups else "⏳ Provável", "mercados": pool}
 
-# --- FUNÇÃO HELPER COM HTML/CSS INJETADO ---
+# --- FUNÇÃO HELPER COM HTML/CSS INJETADO SEM RECUOS PARA NÃO VAZAR ---
 def gerar_bilhetes_diversos(mercados_pool, tipo_bilhete, titulo_prefixo):
     if not mercados_pool:
-        st.warning(f"Aguardando mais dados para o {titulo_prefixo}.")
+        st.warning(f"Aguardando mais dados precisos para gerar {titulo_prefixo}.")
         return
 
     bilhetes_gerados = []
@@ -191,7 +183,7 @@ def gerar_bilhetes_diversos(mercados_pool, tipo_bilhete, titulo_prefixo):
         else: break
 
     if not bilhetes_gerados:
-        st.warning(f"Não há variedade estatística suficiente neste jogo para múltiplos bilhetes.")
+        st.warning(f"A IA utilizou os melhores mercados disponíveis e não há mais opções isoladas para formar múltiplos bilhetes aqui.")
         return
 
     cols = st.columns(len(bilhetes_gerados))
@@ -200,25 +192,15 @@ def gerar_bilhetes_diversos(mercados_pool, tipo_bilhete, titulo_prefixo):
         odd_t = 1.0
         for x in bilhete: odd_t *= x[2]
         
-        # MONTAGEM DO CARD EM HTML
         classe_odd = "ousado" if tipo_bilhete == "ousado" else ""
         icone_titulo = "🔥" if tipo_bilhete == "ousado" else "🛡️"
         
-        html_card = f"""
-        <div class="bet-card">
-            <div class="bet-title">{icone_titulo} {titulo_prefixo} {i+1}</div>
-            <div class="odd-box {classe_odd}">Odd: {odd_t:.2f}</div>
-        """
-        
+        # HTML todo em uma linha/sem recuos para o Streamlit não achar que é código Markdown
+        html_card = f'<div class="bet-card"><div class="bet-title">{icone_titulo} {titulo_prefixo} {i+1}</div><div class="odd-box {classe_odd}">Odd: {odd_t:.2f}</div>'
         for x in bilhete:
-            html_card += f"""
-            <div class="bet-item">
-                <div class="bet-market">🎯 {x[0]}</div>
-                <div class="bet-reason">{x[1]}</div>
-            </div>
-            """
-            
-        html_card += "</div>"
+            html_card += f'<div class="bet-item"><div class="bet-market">🎯 {x[0]}</div><div class="bet-reason">{x[1]}</div></div>'
+        html_card += '</div>'
+        
         col.markdown(html_card, unsafe_allow_html=True)
 
 # --- INTERFACE PRINCIPAL ---
@@ -266,25 +248,13 @@ with tab_ia:
                     cols = st.columns(min(3, len(mercados)))
                     for i in range(min(3, len(mercados))):
                         m = mercados[i]
-                        # Estilo customizado para entrada simples
-                        card_simples = f"""
-                        <div class="bet-card">
-                            <div class="bet-title">Recomendação {i+1}</div>
-                            <div class="odd-box">Odd: {m[2]:.2f}</div>
-                            <div class="bet-item">
-                                <div class="bet-market">🎯 {m[0]}</div>
-                                <div class="bet-reason">Confiança: {round(m[3], 1)}%<br>{m[1]}</div>
-                            </div>
-                        </div>
-                        """
+                        card_simples = f'<div class="bet-card"><div class="bet-title">Recomendação {i+1}</div><div class="odd-box">Odd: {m[2]:.2f}</div><div class="bet-item"><div class="bet-market">🎯 {m[0]}</div><div class="bet-reason">Confiança: {round(m[3], 1)}%<br>{m[1]}</div></div></div>'
                         cols[i].markdown(card_simples, unsafe_allow_html=True)
                 
                 else:
-                    m_seguros = [x for x in mercados if x[3] >= 70]
-                    m_ousados = [x for x in mercados if x[3] < 70]
-                    
-                    if len(m_seguros) < 3: m_seguros = mercados[:min(5, len(mercados))]
-                    if len(m_ousados) < 3: m_ousados = mercados[max(0, len(mercados)-5):]
+                    # SEPARAÇÃO ESTRITA: >= 65 é Seguro. Menos que 65 é Ousado. Sem copiar itens de um para o outro.
+                    m_seguros = [x for x in mercados if x[3] >= 65]
+                    m_ousados = [x for x in mercados if x[3] < 65]
 
                     st.markdown("### 🛡️ BILHETES CONSERVADORES")
                     gerar_bilhetes_diversos(m_seguros, "seguro", "Bilhete Seguro")
