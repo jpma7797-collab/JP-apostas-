@@ -92,17 +92,23 @@ def api_call(endpoint, params):
     headers = {'x-apisports-key': CHAVE_API}
     try:
         res = requests.get(url, headers=headers, params=params)
-        return res.json().get('response', [])
-    except: return []
+        data = res.json()
+        if data.get('errors'):
+            return {"erro": data.get('errors')}
+        return data.get('response', [])
+    except Exception as e:
+        return {"erro": str(e)}
 
 # --- CAÇADOR DE ODDS REAIS ---
 def buscar_odds_reais(f_id):
-    """Busca as odds oficiais disponíveis na API-Sports."""
     odds_data = api_call("odds", {"fixture": f_id})
     mercados_reais = {}
     
-    if odds_data and odds_data[0].get("bookmakers"):
-        # Pega a primeira casa de apostas disponível (Bet365, Betfair, etc)
+    # Proteção caso a API mande erro no meio da busca de odds
+    if isinstance(odds_data, dict) and "erro" in odds_data:
+        return mercados_reais
+
+    if odds_data and isinstance(odds_data, list) and len(odds_data) > 0 and odds_data[0].get("bookmakers"):
         bets = odds_data[0]["bookmakers"][0].get("bets", [])
         for b in bets:
             nome = b["name"]
@@ -130,9 +136,11 @@ def buscar_odds_reais(f_id):
 def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     data = api_call("predictions", {"fixture": f_id})
     lineups = api_call("fixtures/lineups", {"fixture": f_id})
-    odds_reais = buscar_odds_reais(f_id) # Puxando as odds do mercado
+    odds_reais = buscar_odds_reais(f_id)
     
-    if not data: return None
+    # Validação de segurança para não quebrar a página
+    if not data or (isinstance(data, dict) and "erro" in data) or not isinstance(data, list) or len(data) == 0:
+        return None
     
     p = data[0]
     comp = p['comparison']
@@ -190,12 +198,12 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
         odd = odds_reais.get("under_25", 1.65)
         pool.append(["Menos de 2.5 Gols", "Defesas sólidas, jogo muito truncado.", odd, "gols_under"])
 
-    # --- 3. CHUTES E FINALIZAÇÕES (Mercados Alternativos) ---
+    # --- 3. CHUTES E FINALIZAÇÕES ---
     if att_c >= 60:
         pool.append([f"Chutes ao Gol ({casa_nome}): Mais de 4.5", "Mandante pressiona muito em casa.", 1.70, "chutes_casa"])
     if att_f >= 55:
         pool.append([f"Chutes ao Gol ({fora_nome}): Mais de 3.5", "Visitante usa muito o contra-ataque.", 1.80, "chutes_fora"])
-    if lineups and win_c > 50:
+    if lineups and not (isinstance(lineups, dict) and "erro" in lineups) and win_c > 50:
         pool.append([f"Atacante {casa_nome} (+1.5 Chutes a Gol)", "Homem de referência será muito acionado.", 2.10, "jogador_chutes"])
 
     # --- 4. ESCANTEIOS ---
@@ -215,9 +223,13 @@ def motor_de_analise_avancada(f_id, casa_nome, fora_nome):
     if def_c > 60 and att_f > 50:
         pool.append([f"Impedimentos ({fora_nome}): Mais de 1.5", "Mandante joga com linhas altas, visitante tenta bolas longas.", 1.65, "impedimentos"])
 
-    return {"status": "✅ Oficial" if lineups else "⏳ Provável", "mercados": pool}
+    is_oficial = False
+    if lineups and isinstance(lineups, list) and len(lineups) > 0:
+        is_oficial = True
 
-# --- GERADOR INTELIGENTE DE BILHETES (BAIXA/ALTA ODD) ---
+    return {"status": "✅ Oficial" if is_oficial else "⏳ Provável", "mercados": pool}
+
+# --- GERADOR INTELIGENTE DE BILHETES ---
 def construir_bilhetes(mercados_pool):
     if not mercados_pool:
         st.warning("Dados insuficientes para gerar bilhetes para esta partida.")
@@ -277,9 +289,21 @@ with tab_ia:
     st.markdown("<p style='color: #a0aec0; margin-bottom: 30px;'>Inteligência Artificial para análises dinâmicas baseadas nos atributos de cada jogo.</p>", unsafe_allow_html=True)
     
     data_sel = st.date_input("Data dos Jogos:", value=datetime.date.today()).strftime("%Y-%m-%d")
-    jogos_dia = api_call("fixtures", {"date": data_sel, "timezone": "America/Sao_Paulo"})
     
-    if jogos_dia:
+    with st.spinner("Buscando jogos no servidor..."):
+        jogos_dia = api_call("fixtures", {"date": data_sel, "timezone": "America/Sao_Paulo"})
+    
+    # 1. VERIFICA SE DEU ERRO DE API (LIMITE)
+    if isinstance(jogos_dia, dict) and "erro" in jogos_dia:
+        st.error("⚠️ **Erro na comunicação com a API-Sports**")
+        st.json(jogos_dia["erro"])
+        st.info("💡 **Dica:** O limite diário pode ter esgotado. Tente forçar a atualização.")
+        if st.button("🔄 Tentar Novamente / Limpar Cache", type="primary"):
+            st.cache_data.clear()
+            st.rerun()
+
+    # 2. SE TROUXE OS JOGOS NORMALMENTE
+    elif jogos_dia and isinstance(jogos_dia, list):
         c1, c2, c3 = st.columns(3)
         modo = c1.radio("Modo de Busca:", ["Destaques", "Países/Ligas"])
         
@@ -328,6 +352,16 @@ with tab_ia:
                         renderizar_bilhetes(b_ous, "ousado", "Bilhete Ousado")
             else:
                 st.warning("Jogo com pouquíssimas estatísticas. Não há margem segura para gerar bilhetes personalizados.")
+
+    # 3. SE VEIO VAZIO (O ERRO QUE VOCÊ ESTAVA TENDO!)
+    else:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.warning("⚠️ **A tela parou de carregar porque o sistema travou sem resultados na memória.**")
+        st.write("Isso acontece quando o aplicativo salva um 'cache vazio' após uma oscilação na internet ou se a API realmente não cobrir nenhum jogo nesta data.")
+        
+        if st.button("🔄 Forçar Atualização (Limpar Cache)", type="primary"):
+            st.cache_data.clear()
+            st.rerun()
 
 # --- ABA CALCULADORA ---
 with tab_calc:
