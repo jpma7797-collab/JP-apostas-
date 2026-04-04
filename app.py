@@ -7,7 +7,7 @@ import random
 st.set_page_config(page_title="JP Apostas Pro", layout="wide", initial_sidebar_state="collapsed")
 
 # --- SUA CHAVE DA API ---
-CHAVE_API = "916bce9d916e28de163631b77d022cfc"
+CHAVE_API = "4ff6fcf934058cffb79383415bbb913e"
 
 # --- CSS PREMIUM (VISUAL DE CASA DE APOSTAS) ---
 st.markdown('''
